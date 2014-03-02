@@ -17,23 +17,34 @@ http://www.fourwalledcubicle.com/LUFA.php
 
 #include "vserial-descriptors.h"
 
-#include <LUFA/Drivers/Board/LEDs.h>
 #include <LUFA/Drivers/USB/USB.h>
 #include <LUFA/Platform/Platform.h>
 
-/** LED mask for the library LED driver, to indicate that the USB interface is not ready. */
-#define LEDMASK_USB_NOTREADY      LEDS_LED1
+/* the "Olimexino 32U4" is not defined as a Board in LUFA, so we'll just
+ * deal with LEDs and Buttons ourselves.
+ *
+ *	Component
+ *	Designation     Signal     ATMEGA32U4                  Pin
+ *	---------------:----------:---------------------------:---
+ *	LED1 (Green)    D7(LED1)   PE6/AIN0/INT6                1
+ *	LED2 (Yellow)   D9(LED2)   PB5/PCINT5/OC1A/#OC4B/ADC12 29
+ *	TxLED (Green)   TXLED      PD5/XCK1/CTS                22
+ *	RxLed (Yellow)  D17(RXLED) PB0/SS/PCINT0                8
+ *	---------------:----------:---------------------------:--- */
 
-/** LED mask for the library LED driver, to indicate that the USB interface is enumerating. */
-#define LEDMASK_USB_ENUMERATING  (LEDS_LED2 | LEDS_LED3)
+volatile static char led_state;
 
-/** LED mask for the library LED driver, to indicate that the USB interface is ready. */
-#define LEDMASK_USB_READY        (LEDS_LED2 | LEDS_LED4)
-
-/** LED mask for the library LED driver, to indicate that an error has occurred in the USB interface. */
-#define LEDMASK_USB_ERROR        (LEDS_LED1 | LEDS_LED3)
+enum vserial_leds {
+	LED1 = 0x01,
+	LED2 = 0x02,
+	TXLED = 0x04,
+	RXLED = 0x08
+};
 
 /* Function Prototypes: */
+static void update_leds(void);
+static void init_leds(void);
+
 void SetupHardware(void);
 
 void EVENT_USB_Device_Connect(void);
@@ -78,24 +89,63 @@ static FILE USBSerialStream;
 int main(void)
 {
 	SetupHardware();
+	int16_t i;
 
-	/* Create a regular character stream for the interface so that it can be used with the stdio.h functions */
+	/*
+	 * Create a regular character stream for the interface so that it can
+	 * be used with the stdio.h functions
+	 */
 	CDC_Device_CreateStream(&VirtualSerial_CDC_Interface, &USBSerialStream);
 
-	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
+//	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
 	GlobalInterruptEnable();
 
 	for (;;)
 	{
-		/* Must throw away unused bytes from the host, or it will lock up while waiting for the device */
-		CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
+
+		/*
+		 * Must throw away unused bytes from the host, or it will
+		 * lock up while waiting for the device
+		 */
+		i = CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
+		if (i != -1){ /* received a byte */
+			fputc(i, &USBSerialStream);
+			/* will not block, I checked :-) */
+		}
 
 		CDC_Device_USBTask(&VirtualSerial_CDC_Interface);
 		USB_USBTask();
 	}
 }
 
-/** Configures the board hardware and chip peripherals for the demo's functionality. */
+#define SET_CLEAR_BIT(val, bit, setunset) \
+	(((val) & ~(bit)) | ((setunset) ? bit : 0))
+
+static void
+update_leds()
+{
+	PORTE = SET_CLEAR_BIT(PORTE, _BV(6), led_state & LED1);
+	PORTB = SET_CLEAR_BIT(PORTB, _BV(5), led_state & LED2);
+	PORTD = SET_CLEAR_BIT(PORTD, _BV(5), led_state & TXLED);
+	PORTB = SET_CLEAR_BIT(PORTB, _BV(0), led_state & RXLED);
+}
+
+static void
+init_leds()
+{
+	DDRE |= _BV(6); /* LED1 */
+	DDRB |= _BV(5); /* LED2 */
+	DDRD |= _BV(5); /* TXLED */
+	DDRB |= _BV(0); /* RXLED */
+	led_state = 0;
+	update_leds();
+}
+
+
+/*
+ * Configures the board hardware and chip peripherals
+ * for the demo's functionality.
+ */
 void SetupHardware(void)
 {
 	/* Disable watchdog if enabled by bootloader/fuses */
@@ -106,20 +156,24 @@ void SetupHardware(void)
 	clock_prescale_set(clock_div_1);
 
 	/* Hardware Initialization */
-	LEDs_Init();
 	USB_Init();
+
+	init_leds();
+	update_leds();
 }
 
 /** Event handler for the library USB Connection event. */
 void EVENT_USB_Device_Connect(void)
 {
-	LEDs_SetAllLEDs(LEDMASK_USB_ENUMERATING);
+	led_state |= LED1;
+	update_leds();
 }
 
-/** Event handler for the library USB Disconnection event. */
+/* Event handler for the library USB Disconnection event. */
 void EVENT_USB_Device_Disconnect(void)
 {
-	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
+	led_state &= ~LED1;
+	update_leds();
 }
 
 /** Event handler for the library USB Configuration Changed event. */
@@ -129,10 +183,12 @@ void EVENT_USB_Device_ConfigurationChanged(void)
 
 	ConfigSuccess &= CDC_Device_ConfigureEndpoints(&VirtualSerial_CDC_Interface);
 
-	LEDs_SetAllLEDs(ConfigSuccess ? LEDMASK_USB_READY : LEDMASK_USB_ERROR);
+	if (!ConfigSuccess)
+		led_state &= ~LED1;
+	update_leds();
 }
 
-/** Event handler for the library USB Control Request reception event. */
+/* Event handler for the library USB Control Request reception event. */
 void EVENT_USB_Device_ControlRequest(void)
 {
 	CDC_Device_ProcessControlRequest(&VirtualSerial_CDC_Interface);
