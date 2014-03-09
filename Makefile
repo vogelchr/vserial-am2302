@@ -18,7 +18,8 @@ F_CPU        = 16000000
 F_USB        = $(F_CPU)
 OPTIMIZATION = s
 TARGET       = vserial-app
-SRC          = $(TARGET).c vserial-descriptors.c $(LUFA_SRC_USB) $(LUFA_SRC_USBCLASS)
+SRC          = $(TARGET).c vserial-descriptors.c am2302.c \
+	       $(LUFA_SRC_USB) $(LUFA_SRC_USBCLASS)
 LUFA_PATH    = ../LUFA-130901/LUFA/
 CC_FLAGS     = -DUSE_LUFA_CONFIG_HEADER
 LD_FLAGS     =
