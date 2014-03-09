@@ -8,6 +8,8 @@ LUFA (Lightweight USB Framework for AVRs) library.
 http://www.fourwalledcubicle.com/LUFA.php
 */
 
+#include "am2302.h"
+
 #include <avr/io.h>
 #include <avr/wdt.h>
 #include <avr/power.h>
@@ -86,6 +88,29 @@ USB_ClassInfo_CDC_Device_t VirtualSerial_CDC_Interface = {
  */
 static FILE USBSerialStream;
 
+static void
+print_temp_rh_report(void)
+{
+	unsigned char data[5];
+	int16_t temp;
+	uint16_t rh;
+	int i;
+
+	i = am2302_get_raw_data(data);
+
+	/* for debugging, print raw bytes */
+	fprintf(&USBSerialStream,"AS2302 raw bytes: recv cnt=%d",i);
+	for (i=0; i<sizeof(data); i++)
+		fprintf(&USBSerialStream," %02x",data[i]);
+	fputs("\r\n",&USBSerialStream);
+
+	/* print temperature and relative humidity */
+	i = am2302_get_result(&temp, &rh);
+	fprintf(&USBSerialStream,
+		"status: %d, temp=%d (*0.1 dC), rh=%d (*0.1%%)\r\n",
+		i, temp, rh);
+}
+
 int main(void)
 {
 	SetupHardware();
@@ -100,6 +125,8 @@ int main(void)
 //	LEDs_SetAllLEDs(LEDMASK_USB_NOTREADY);
 	GlobalInterruptEnable();
 
+	am2302_init();
+
 	for (;;)
 	{
 
@@ -109,6 +136,18 @@ int main(void)
 		 */
 		i = CDC_Device_ReceiveByte(&VirtualSerial_CDC_Interface);
 		if (i != -1){ /* received a byte */
+			if (i == '+') {
+				fputs("Triggering conversion.",&USBSerialStream);
+				am2302_trigger_read();
+				continue;
+			}
+
+			if (i == '?'){
+				print_temp_rh_report();
+				continue;
+			}
+
+			/* else just echo character back to host */
 			fputc(i, &USBSerialStream);
 			/* will not block, I checked :-) */
 		}

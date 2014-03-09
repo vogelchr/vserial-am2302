@@ -6,8 +6,27 @@ LUFA library out of tree.
 Currently it runs on a "Olimexino 32U4" board and just echos back
 the characters received on a virtual serial port.
 
+### AM2302 Interface ###
+
+Additionally, if you connect a AM2302 temperature and relative humidity
+sensor to port D4/ICP1/ADC8 (digital 4 on the "Arduino board") you can...
+
+ * press "+" to trigger a conversion
+ * press "?" to read back temperature and relative humidity from the sensor.
+
+Compared to most other code that can be found on the internet, this library
+uses the input capture functionality of Timer/Counter1 to read in the bits.
+It does not require the MCU to busy-wait until all bits are clocked in.
+
+### Compileing ###
+
 To compile this program, you have to have LUFA-130901 unpacked in
 ../LUFA-130901, or adjust the Makefile accordingly.
+
+### Flashing ###
+
+Run ./flash.sh to flash the resulting binary using avrdude and a
+AVR dragon programmer in ISP mode.
 
 ### Copyright ###
 
