@@ -203,7 +203,7 @@ am2302_get_result(int16_t *temp, uint16_t *rh)
 	/* third byte received @2, fourth byte received @1 */
 	uint16_t val = (am2302_data[2] << 8) | am2302_data[1];
 	if (val & 0x8000) { /* topmost bit is set */
-		val &= 0x8000; /* clear topmost bit */
+		val &= ~0x8000; /* clear topmost bit */
 		*temp = - val;
 	} else {
 		*temp = val;
